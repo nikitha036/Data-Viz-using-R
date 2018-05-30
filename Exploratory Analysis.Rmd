@@ -1,0 +1,251 @@
+---
+title: "Exploratory Analysis of Corpus of Data"
+author: "Nikitha Agarampalli"
+date: "April 18, 2018"
+output: html_document
+---
+
+## Overview  
+
+Text analysis is the process of deriving high-quality information from a text. This text can be presented for analysis in any format and the most common format includes corpus of data from which the text is processed, analyzed and presented.Text analysis involves information retrieval, lexical analysis to study word frequency distributions, pattern recognition, tagging/annotation, information extraction, data mining techniques incl uding link and association analysis, visualization and predictive analytics. 
+
+Data visualization is a technique used to help people understand the significance of data or information by encoding it as a visual context. Data visualization plays a major role in the field of data analytics and its primary goal is to communicate the information clearly and efficiently.
+
+The goal of this project is to read a corpus of text files and present to the reader the topic composition in the corpus using the best visualization approach. This is achieved by extracting the list of topics from the given corpus and correlate them with each other to form a topic hierarchy. Before proceeding with the final visualization, it is necessary to carry out few data processing steps to convert the corpus of data into necessary format. In this assignment I have used WORD CLOUD technique for visualizing the content of the corpus and understand the topic composition of the text in the corpus. The corpus used in this assignment consists of 7145 short text documents split into 19 separate folders for analysis. 
+
+```{r global_options, include=FALSE}
+rm(list=ls()) 
+library(knitr)
+opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+               echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+```{r}
+# Loading the necessary packages to perform exploratory analysis of the corpus
+library(tm)
+library(SnowballC)
+library(wordcloud)
+library(ggplot2)
+library(ggdendro)
+library(dplyr)
+library(cluster)
+library(HSAUR)
+library(fpc)
+library(skmeans)
+library(plyr)
+library(philentropy)
+library(gplots)
+library(stats)
+library(treemapify)
+```
+
+## Visualizing clusters of data by step-wise processing  
+
+### 1. Data collecting  
+
+```{r}
+# Reading the Corpus data and storing it
+corp <- VCorpus(DirSource("corpus_n_topics3", recursive = TRUE, encoding = "UTF-8"),
+                       readerControl = list(language = "eng"))
+```
+
+### 2. Data cleaning - Corpus Pre-processing  
+This step involves processing the data by corpus pre-processing steps such as stop word removal, punctuation removal, character removal, zero rows/columns removal, case standardization and word steming. The corpus is processed to form a document term matrix for further processing.  
+
+```{r}
+
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+corp <- tm_map(corp, toSpace, "/")
+corp <- tm_map(corp, toSpace, "/.")
+corp <- tm_map(corp, toSpace, "@")
+corp <- tm_map(corp, toSpace, "\\|")
+corp <- tm_map(corp, content_transformer(tolower))
+corp <- tm_map(corp, removeWords, stopwords("english"))
+corp <- tm_map(corp, removePunctuation)
+corp <- tm_map(corp, removeNumbers)
+corp <- tm_map(corp, removeWords, c(letters)) 
+corp <- tm_map(corp, stemDocument)
+
+corp_dtm <- DocumentTermMatrix(corp, control = list(weighting = function(x) weightTfIdf(x, normalize = TRUE)))
+corp_dtm <- removeSparseTerms(corp_dtm, 0.999)
+corp_dtm_mat <- corp_dtm %>% as.matrix()
+corp_dtm_mat <- corp_dtm_mat[rowSums(corp_dtm_mat^2) !=0,]
+
+```
+
+### 3. Sampling  
+As exploratory analysis requires fast processing and the corpus contains huge amount of data, sampling of this data is often a necessary step for improving the efficiency. A random sample of 50% of the data set is taken and processed further.
+
+```{r}
+
+percent <- 50
+sample_size <-  nrow(corp_dtm_mat) * percent/100
+
+corp_samp <- corp_dtm_mat[sample(1:nrow(corp_dtm_mat), sample_size, replace=FALSE),]
+
+```
+
+### 4. Spherical k-means  
+The goal of this step is to verify if we can uncover the partitions in the corpus data set. We need to specify the number of clusters to be formed in this step which is defined below as 6 in our case. This is a calibration/verification step which helps us understand if our preprocessing, sampling and clustering is working properly for further processing.  
+
+```{r}
+# Specify the number of clusters
+k=6
+
+# Use skmeans function to get the vector of cluster of documents
+corpus.dtm.mat.sample.skm  <- skmeans(corp_samp,k, method='genetic')
+
+# Converting the vector into a data frame and assigning it with meaningful column names
+corpus.dtm.mat.sample.skm <- as.data.frame(corpus.dtm.mat.sample.skm$cluster)
+colnames(corpus.dtm.mat.sample.skm) = c("cluster")
+
+```
+
+### 5. Data visualization - Word Cloud technique  
+Word Cloud is a data visualisation method that displays how frequently words appear in a given body of text, by making the size of each word proportional to its frequency. All the words are then arranged in a cluster or cloud of words. Word clouds (also known as text clouds or tag clouds) work in a simple way: the more a specific word appears in a source of textual data, the bigger and bolder it appears in the word cloud. In this assignment, this visualization technique has been applied to analyse the given corpus of text by forming 6 clusters producing 6 word clouds with significant meaning to understand the topic composition of the corpus.
+
+```{r}
+# Create a term document matrix weighted by term frequency and remove the sparse terms
+corp_tdm <- TermDocumentMatrix(corp, control = list(weighting = function(x) weightTf(x)))
+corp_tdm<-removeSparseTerms(corp_tdm, 0.999)
+
+# Picking the documents that match with the random sample taken earlier and convert it into r matrix
+corp_tdm_samp <- corp_tdm[ ,rownames(corp_samp)]
+corp_tdm_samp_mat <- corp_tdm_samp%>% as.matrix()
+
+# Gives the number of clusters
+m <- length(unique(corpus.dtm.mat.sample.skm$cluster))
+
+set.seed(2474)
+par(mfrow=c(2,3))
+
+# for loop to process the word cloud formation m(the length of the corpus) times
+# for each cluster plot an explanatory word cloud
+for (i in 1:m) 
+{
+ cluster_doc_ids <-which(corpus.dtm.mat.sample.skm$cluster==i)
+ corpus.tdm.sample.mat.cluster<- corp_tdm_samp_mat[, cluster_doc_ids]
+
+ v <- sort(rowSums(corpus.tdm.sample.mat.cluster),decreasing=TRUE)
+ d <- data.frame(word = names(v),freq=v)
+
+ wordcloud(words = d$word, freq = d$freq, scale=c(5,.2), min.freq = 3,
+            max.words=60, random.order=FALSE, rot.per=0.35, 
+            colors = brewer.pal(8, "Dark2"))
+ title(paste("Cluster", i))
+}
+
+```
+
+### Data Visualization - Dendograms
+
+```{r}
+
+# Similarity matrix 
+sim_matrix<-distance(corp_samp, method = "cosine")
+
+# For readiblity the doc names are given to the cols and rows of the similarity matrix
+colnames(sim_matrix) <- rownames(corp_samp)
+rownames(sim_matrix) <- rownames(corp_samp)
+
+# Create a distance measure for hierarchical clustering
+dist_matrix <- as.dist(1-sim_matrix)
+
+corpus.dtm.sample.dend <- hclust(dist_matrix, method = "ward.D") 
+
+# plot the dendogram to see the structure that reflects the findings ion k-means algorithm
+set.seed(2584)
+par(mfrow=c(2,1))
+plot(corpus.dtm.sample.dend, hang= -1, labels = FALSE,  main = "Cluster dendrogram", sub = NULL, xlab = NULL, ylab = "Height")
+rect.hclust(corpus.dtm.sample.dend, k = 6, border = "red")
+
+```
+
+### Data Visualization - Tree Map
+
+```{r}
+
+# call the cutree function to return a vector of cluster membership in the order of original data rows
+corpus.dtm.sample.dend.cut <- cutree(corpus.dtm.sample.dend, k=6)
+
+# Create a data frame from the cut and assign meaningful column names to it
+corpus.dtm.sample.dend.cut <- as.data.frame(corpus.dtm.sample.dend.cut)
+colnames(corpus.dtm.sample.dend.cut) = c("cluster")
+
+# Number of clusters at the cut
+m <- length(unique(corpus.dtm.sample.dend.cut$cluster))
+
+# Number of terms per cluster
+n <- 30
+
+# Intialise an empty data frame with empty vectors
+df <- data.frame(word=character(), freq = double(),cluster = integer())
+
+# for each cluster plot an explanatory word cloud
+for (i in 1:m) {
+  
+  cut_doc_ids <-which(corpus.dtm.sample.dend.cut$cluster==i)
+  corpus.tdm.sample.mat.cluster<- corp_tdm_samp_mat[, cut_doc_ids]
+  v <- sort(rowSums(corpus.tdm.sample.mat.cluster),decreasing=TRUE)
+  d <- data.frame(word = names(v),freq=v, cluster=i)
+  
+  # we might want scale so that high frequencies in large cluster don't predominate
+  d[,2] <- scale(d[,2],center=FALSE, scale=TRUE)
+  
+  # take first n values only and bind the data for this cluster with the empty data frame
+  d <-d[1:n,]
+  df<- rbind(df,d)
+}
+
+df$freq <- as.vector(df$freq)
+
+# Function to rename the values in the cluster column as "cluster 1, cluster 2, etc"
+clust_name<-function(x)
+{
+  paste("cluster", x)
+}
+
+# apply the function to the 'cluster' column
+df$cluster<- as.character(apply(df["cluster"], MARGIN = 2,FUN =clust_name ))
+
+# Tree map faceted based on the cluster
+gg <- ggplot(df, aes(area = freq, fill = freq, subgroup=cluster, label = word)) + geom_treemap() +
+  geom_treemap_text(grow = T, reflow = T, colour = "black") + facet_wrap( ~ cluster) +
+  scale_fill_gradientn(colours = terrain.colors(n, alpha = 0.8)) +  theme(legend.position = "bottom") +
+  labs(title = "High Frequency Terms in each Cluster ", caption = "Area of each term is directly proportional to its relative frequency within cluster")
+gg
+
+```
+
+## Analysis and Interpretation  
+
+### 1. Hierarichal structure of the Topic composition  
+The below table gives the hierarchical structure of the topics in the corpus.  
+
+```{r fig.width = 30, fig.height = 30, out.width = "100%", out.height = "100%", dpi = 200}
+image <- "TOPIC_COMPOSITION.png"
+include_graphics(image)
+```
+
+### 2. Data Analysis  
+Analysing and understanding the corpus of data is the most crucial part of every data visualization task. The corpus provided for this assignment consist of 7145 files, each having collection of texts in it. Upon further analysing the texts, it was found that many special characters were present which required data pre-processing.  
+
+After pre-processing the corpus of data, it needs to be clustered for creating a document term matrix. Clustering is the task of dividing the population or data points into a number of groups such that data points in the same groups are more similar to other data points in the same group than those in other groups. There are two most commonly used clustering algorithms i.e. K-Means clustering and Hierarchical clustering. Spherical K-Means is preferred here over hierarchical clustering because K-Means clustering has linear time complexity behavior and can handle big data.  
+
+The clustered data is used to produce Word clouds which is used for the primary data analysis. Further the data is cut into dendograms with which the Tree Maps are created to identify the most dominant list of words in each cluster. This helps us in further confirmation on the topics determined from the word clouds.
+
+### 3. Visualization decisions  
+There are a number of data visualization methods available for presenting the corpus data. Two of the most popular visualization methods are Word Cloud and Dendrogram.  
+
+Word cloud is basically an image composed of words used in a particular text or subject, in which the size of each word indicates its frequency or importance. Whereas a dendrogram is a tree diagram used to illustrate the arrangement of the clusters. Taking both the visualization approach into consideration, visualization using word cloud is more explanatory because a person can clearly identify the topic based on the words in the cloud as the highest frequency words in a particular cluster is shown significantly.  
+
+The **Dendrogram** simply represents the partitions and it does not communicate any information about the data. However, dendograms are also presented in this assignment to visualize the partioning of the corpus.  
+
+**Word cloud** visualization is used here for primary visualization for the topic composition. For implementing the word cloud, the input corpus was divided into 6 clusters and word cloud was generated for each cluster iteratively and the topics which occurred most frequently were extracted from them.  
+
+Further, **Tree map** is used to get the most frequent words in each cluster. Based on these terms from each cluster, the topics are analysed, extracted and presented in a hierarchical structure.
+
+### 4. Conclusion  
+Based on the results obtained, it can be concluded that word cloud visualization method simplified the process of extracting important information from a large volume of data. The word cloud visualization output is user friendly approach of understanding a corpus and the list of topics extracted from various clusters helped in forming a hierarchical structure.  
+
+Further, we can clearly understand that the corpus comprises of contents based on the topics such as Religion, Technology, Computer, School,Sexual Orientation and Gender, Games etc. The word clouds along with the tree map and the hierarchical structure of topic composition presented above clearly communicates the content of the corpus.

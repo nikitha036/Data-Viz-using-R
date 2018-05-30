@@ -1,0 +1,86 @@
+---
+title: "Interactive Plot using plotly for GDP Vs Life Expectancy"
+author: "Nikitha Agarampalli"
+date: "April 18, 2018"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+rm(list=ls()) 
+library(knitr)
+opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+               echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+## Overview  
+Interactive data visualization has been a pursuit of any data analytics person or statistician as it enables direct action on a plot to perform any changes and derive conclusions based on it. This type of plots allow deeper exploration of data than static plots. 
+
+The goal of this assignment is to create an interactive plot based version of the nations.csv dataset to show GDP Vs Expectancy results.  
+
+```{r}
+# Loading the nesessary packages
+
+library(plotly)
+library(readr)
+
+```
+
+## Reading the data and plotting it  
+
+```{r}
+
+# Reading the data file
+nations_data <- read_csv("nations.csv", col_types = cols(population=col_double(),  year = col_date(format="%Y")))
+
+# Foreground data
+nations_data_targets<- subset(nations_data, country=="Ireland" | country =="Norway" | country =="Sweden"   )
+
+# Background data = complement set 
+nations_minus_targets<- subset(nations_data, country!="Ireland" & country !="Norway" & country !="Sweden"  )
+
+# Your background layer
+p_nations<- ggplot(nations_minus_targets, aes(x =year, y=gdp_percap, group = country)) + 
+# this theme clears away grid lines, makes backgound white  
+theme(panel.grid.major = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black", size = 0.25), axis.title.x=element_blank(), axis.text.x = element_text(angle = 30, hjust=1, vjust = .5), legend.key = element_rect(fill = NA, colour = NA, size = 0.25)) 
+
+p_nations<- p_nations + geom_line( size= 0.25, na.rm = TRUE, color="grey90", alpha =0.6, 
+                                   show.legend = FALSE ) + geom_line(data=nations_data_targets, 
+                                                                    size =1, show.legend = TRUE,                                                                            (aes(x=year, y=gdp_percap,                                                                              colour=country, group=country))) +
+
+                        scale_colour_brewer(palette = "Set1") + 
+                        ggtitle("1990-2014 : GDP per capita for Ireland, Norway & Sweden")
+p_nations
+
+```
+
+## Interactive plot of the above graph  
+The above graph is plotted here using plotly with a range slider.  
+
+```{r}
+
+g <- nations_data %>% 
+  
+  # Group by country
+  # initiate a plotly object with date on x and median on y & make the lines grey
+  
+  group_by(country) %>% plot_ly(x = ~year, y = ~gdp_percap) %>%
+  add_lines(name = "Other Nations", hoverinfo = "none", type = "scatter", mode = "lines", 
+            line = list(color = 'rgba(192,192,192,0.4)')) %>%
+  
+  # Plot separate lines for Dallas & Houston. Give the lines different colours and make them hoverable
+  
+  add_lines(name = "", data = filter(nations_data, country %in% c("Ireland", "Norway", "Sweden")),
+            hoverinfo = "country", line = list(color = c("red", "blue")), color = ~country) %>%
+  layout(xaxis = list(rangeselector = list(buttons = list(list(count = 3, step = "year",
+                                                               steepmode = "backward"),
+                                                          list(count = 6, step = "year",
+                                                               stepmode = "backward"),
+                                                          list(count = 1, step = "year", 
+                                                                stepmode = "backward"), 
+                                                          list(count = 1, step = "year",
+                                                               stepmode = "todate"),
+                                                          list(step = "all"))),
+                 rangeslider = list(type = "Year")), yaxis = list(title = "GDP Per Capita"))  
+g
+
+```

@@ -1,0 +1,316 @@
+---
+title: "Visual Evidences for Matt Ridley's Hypothesis on World Population"
+author: "Nikitha Agarampalli"
+date: "February 16, 2018"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+rm(list=ls()) 
+library(knitr)
+opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+               echo=TRUE, warning=FALSE, message=FALSE)
+library("ggplot2")
+library("dplyr")
+library("readr")
+library("reshape2")
+library("scales")
+```
+
+## Introduction:
+
+A nation's economy is essentially driven by good strategists - political, financial etc.  It is, then, the economy that creates opportunities and demand better lifestyles. In fact, most developing/underdeveloped nations believe that they survive while the rest of the world lives. The quality of living portrayed by the media is the primary source of assessment. Hence, developing/underdeveloped nations are working to become strong economies, create in-house opportunities and thereby, intend to uplift their lives to a first-world quality. 
+The economy is one way to reason out fertility rates. However, every theory has multiple dimensions. Few aspects which, we think, needs to be considered are the closing note to this report. No Sneak Peek ! 
+
+But firstly, 
+
+## How does the world population vary with time ?
+
+```{r}
+#The data set has the population per country from 1960-2016
+population_country_wise <- read_csv("World_Pop_CountryWise.csv")
+
+population_country_wise <- select(population_country_wise, `1960`:`2016`)
+population_country_wise <- population_country_wise[complete.cases(population_country_wise),]
+
+#columnar sum to find out annual worldwide population 
+world_population <- apply(population_country_wise, 2, sum)
+world_population <- data.frame(colnames(population_country_wise),world_population)
+colnames(world_population) <- c("Year","Population")
+```
+
+```{r}
+world_population_ts <- ts(world_population[2],start=c(1960,1))
+world_population_ts_percent <-abs( x = world_population_ts/
+          stats::lag(world_population_ts, -1) -1  )*100
+world_population_ts_percent <- rbind(0,world_population_ts_percent)
+world_population <- cbind(world_population_ts_percent,
+                        world_population)
+world_population <-filter(world_population,
+                        world_population_ts_percent>0)
+```
+
+## PLOT - 1
+
+```{r}
+#common graph properties that would be used across this document
+graph_commons <- theme( panel.background = element_blank(), 
+    axis.line = element_line(colour = "black", size = 0.25), 
+    axis.text.x = element_text(angle = 90, hjust=1, vjust = .5))
+
+
+ggplot(world_population, aes(x=Year, y=world_population_ts, group = 1)) + geom_line()+
+     geom_line(size=0.5,colour = "blue") +
+    stat_smooth(method=lm, se= FALSE, colour = "red", size = 0.5) + 
+    xlab("Year") + ylab("Population Increase") +
+    ggtitle("Percentage Increase in World Population") + graph_commons
+    
+```
+
+### Observations:  
+
+On looking at the regression line, it is obvious that there is a downward trend i.e , the population decreases over the years.
+
+It is good to note that,  
+1. The decrease is not steady.  
+2. Everytime there is a surge, it is not as huge as the previous one.Example,  There seems to be an increase in population  between 1964- 1974 which is larger than the one between 1980-1992.  
+3. However, this seems to work the other way around in the case of decreases. Every level of plunge seems to dip deeper, compared to the previous one. And, the population surge levels do not seem to compensate for the plunge.  
+
+***Mathematically, if we think of the data as waves, they seem to calm down over time, and is expected to eventually stabilize.***
+
+According to Ridley's theory, the fertility/replacement rate is 2.1, below which the population is expected to shrink. From the UN data, we have the annual fertility rates per country. We can, then,  derive the average global fertility rate. By putting them all together, we could do a comparative study on where individual countries lie in terms of fertility rates with respect to the replacement rate and global average fertility. Since, Ridley's theory talks about fertility rates in rich and developing countries, it would be helpful to put a few such countries in the pool to understand his perspective.
+
+```{r}
+#compute annual average global fertility rate
+country_fRate <- read_csv("Fertility_Rate_CountryWise.csv")
+country_fRate <- select(country_fRate, `Country Name`,`1960`:`2015`)
+average_fRate <- colMeans(country_fRate[-1], na.rm = TRUE)
+average_fRate <- data.frame(names(average_fRate),average_fRate)
+colnames(average_fRate) <- c("Year","AverageFertilityRate")
+str(average_fRate)
+```
+
+```{r}
+
+#subset of annual feritlity rates of developing countries
+fRate_developing <- subset(country_fRate,
+                                  country_fRate$`Country Name` == "Argentina" |                                   country_fRate$`Country Name` == "India" | 
+                                  country_fRate$`Country Name` == "Mexico" | 
+                                  country_fRate$`Country Name` == "Russia")
+fRate_developing.melted <- melt(fRate_developing, 
+                                        id=("Country Name"))
+colnames(fRate_developing.melted) <- c("Country", "Year", "FertilityRate")
+#tag them as developing for an additional visualization element
+fRate_developing.melted <- cbind(fRate_developing.melted,
+                                CountryType="Developing")
+```
+
+```{r}
+
+#subset of annual feritlity rates of newly developed countries
+fRate_newly_developed <- subset(country_fRate,
+                                country_fRate$`Country Name` == "Brazil" | 
+                                 country_fRate$`Country Name` == "China" | 
+                                 country_fRate$`Country Name` == "Chile" | 
+                                 country_fRate$`Country Name` == "Singapore")
+fRate_newly_developed
+fRate_newly_developed.melted <- melt(fRate_newly_developed, id=("Country Name"))
+fRate_developing.melted
+colnames(fRate_newly_developed.melted) <- c("Country", "Year", "FertilityRate")
+#tag them as newlydeveloped for an additional visualization element
+fRate_newly_developed.melted <- cbind(fRate_newly_developed.melted,CountryType="NewlyDeveloped")
+```
+
+```{r}
+#subset of annual feritlity rates of developed countries
+fRate_developed <- subset(country_fRate,
+                            country_fRate$`Country Name` == "United States" | 
+                             country_fRate$`Country Name` == "Japan" | 
+                             country_fRate$`Country Name` == "Germany" | 
+                             country_fRate$`Country Name` == "Canada")
+
+fRate_developed.melted <- melt(fRate_developed, id=("Country Name"))
+
+colnames(fRate_developed.melted) <- c("Country", "Year", "FertilityRate")
+#tag them as Rich for an additional visualization element
+fRate_developed.melted <- cbind(fRate_developed.melted,CountryType="Rich")
+```
+
+```{r}
+#subset of annual feritlity rates of underdeveloped countries
+fRate_poor <- subset(country_fRate,
+                             country_fRate$`Country Name` == "Haiti" | 
+                             country_fRate$`Country Name` == "Chad" |
+                             country_fRate$`Country Name` == "Yemen" |
+                             country_fRate$`Country Name` == "Mali" | 
+                             country_fRate$`Country Name` == "Ethiopia")
+
+fRate_poor.melted <- melt(fRate_poor, id=("Country Name"))
+
+colnames(fRate_poor.melted) <- c("Country", "Year", "FertilityRate")
+#tag them as underdeveloped for an additional visualization element
+fRate_poor.melted <- cbind(fRate_poor.melted,CountryType="Underdeveloped/Poor")
+ 
+SelectedCountries <- rbind(fRate_poor.melted,fRate_developed.melted,fRate_newly_developed.melted,fRate_developing.melted)
+```
+
+In the above code, we just picked up a list of rich, developing, newly developed, and poor countries from the GDP data we had, and joined it with the fertility rate data. 
+
+Here is what it looks like:  
+
+## PLOT - 2
+
+```{r}
+
+#the base background plot needed for the two graphs below
+base_plot <-  ggplot(data=average_fRate, aes(x=Year , y=AverageFertilityRate, 
+                        lty = "WorldAverage"))+geom_line()+
+              geom_hline(aes(yintercept=2.1,lty = "2.1 ReplacementRate") ,
+                         color="red") +
+              scale_linetype_manual(name = "ReplacementRate", values = c(2, 2),
+              guide=guide_legend(override.aes=list(color=c("red")))) +
+              scale_linetype_manual(name = "Reference Data", values = c(2, 2), 
+              guide = guide_legend(override.aes =list(color=c("red","black"))))
+
+
+#base plot + common properties of graphs in this document + required graph
+ base_plot+graph_commons+
+       geom_point(data=SelectedCountries,aes(x= Year, y =FertilityRate,
+                 color=Country, shape = CountryType, group=Country))
+
+```
+
+### Observations:  
+
+1. The world average fertility rate shows a gradual decrease.  
+
+2. Poor Countries such as Mali, Chad, Ethiopia, Haiti have a very high fertility rate when compared to other developing and developed countries. They are not even close to the replacement line, but are exhibiting a fall.  
+
+3. Rich countries such as Canada, United states, Japan have a low fertility rate. Though Canada and United states had relatively high fertility rate during the 1960s, they have shown a decreasing pattern down the lane. Overall, most of the rich countries have their fertility rates maintained below the 2.1 replacement rate from 1971 till date.  
+4. The newly developed countries initially had a higher fertility rate which is fallen gradually down close to the 2.1 replacement line in 1970s and gone below this line since a decade. However, countries like Singapore had shown a rapid decrease in the fertility rate and reached below the 2.1 replacement line within a period of ten years in the mid 1970s  
+
+5. The developing countries are showing steady decrease in the fertility rate which is gone below the world average rate  and would go below the 2.1 replacement rate in a decade.However, it might take more than a few decades for all the countries to hit below the replacement line.
+
+But this got us to wonder, how do we account for gender imbalance scenarios ? What if the number of women had reduced, given that few nations had an issue of female infanticide. So, maybe a study of number of births per 1000 or N woman could have helped ?
+
+Further more, a country-wise plot can be too much detail in a single graph. Hence, it would be helpful to take a step back and look at regions. 
+
+The below is a plot of same points but at a region level. 
+
+```{r}
+#get annual gdp per region
+nations_gdp_data <- read_csv("nations.csv")
+nations_gdp_data <- select(nations_gdp_data,country,region)
+colnames(nations_gdp_data) <- c("Country","Region")
+
+regional_data <- left_join(SelectedCountries,nations_gdp_data)
+#create a regional summary of their annual average fertility rate 
+regional_data <- regional_data %>% group_by(Year,Region,CountryType)   %>% summarise( AvgFertility = mean(FertilityRate))
+```
+
+## PLOT - 3
+
+```{r}
+     base_plot+ graph_commons +
+         geom_point(data=regional_data,aes(x= Year, y =AvgFertility, 
+                    color = Region,shape = CountryType, group=Region))
+```
+
+### Observations:  
+
+1. Most of the rich countries from the Europe & Central Asia, East Asia & Pacific, North America regions have a fertility rate much below the 2.1 Replacement Rate line.  
+
+2. The newly developed countries from Latin America and Carribean show gradual decrease in fertility rate and have fallen below 2.1 Replacement Rate line recently unlike few newly developed countries from east Asia and Pacific which have fallen below this line in mid 1970s itself.  
+
+3. Developing countries from South Asia and few from Latin America and Carribean shows a steady decrease in the fertility rate which is expected to go below the 2.1 Replacement Rate line within a decade.  
+
+4. All the poor countries with High fertility rate belong to Sub-Saharian and Africa few countries from Latin America and Carribean also show higher fertility rate with a decreasing pattern in the recent years which is expected to go below the world average rate in a decade.
+
+## Does the fertility rate get impacted by the world GDP Per capita or education level attained by the woman ?
+
+**Firstly, let us study Education level vs Fertility rate over the years.**
+
+```{r}
+
+#data preparation to load relationship between gdp per capita/education and fertility rate respectively.
+femaleEducation <- read_csv("femaleEducation.csv")
+gdpdata <- read.csv("nations.csv")
+
+#compute avergae annual gdp
+gdpdata<-  gdpdata %>% select(year,gdp_percap)
+colnames(gdpdata) <- c('Year', 'GDP')
+gdpdata$Year=as.numeric(as.character(gdpdata$Year))
+gdpDataAvg <- gdpdata%>% group_by(Year) %>% summarize( AvgGDP= mean(GDP, na.rm=TRUE))
+colnames(gdpDataAvg) <- c('Year', 'AvgGDP')
+average_fRate$Year=as.numeric(as.character(average_fRate$Year))
+
+#compute annual average number of secondary school female enrollments
+enrollmentAvg <- femaleEducation %>% select(`Time Period`, `Observation Value`) %>% group_by(`Time Period`) %>% summarize( AvgEnrollment= mean(`Observation Value`))
+colnames(enrollmentAvg) <- c('Year', 'AvgEnrollment')
+
+#join based on year with the fertility rate data set
+fertilityVsEducation <-inner_join(average_fRate, enrollmentAvg, by="Year")
+fertilityVsPerCapita <- inner_join(average_fRate,gdpDataAvg, by="Year")
+```
+
+
+The yearly average number of woman enrolled for secondary education worldwide  is taken as an indicator. Several studies state that orientation towards career and education have encouraged woman to plan better families/living. Infact, many developing and underdeveloped countries strongly strive to improve litracy in women  to create general awareness, exposure and empowerment. Also, such countries have been promoting birth planners as an attempt to eliminate the taboo behind it. Personally, as educated women ourselves, we feel our education has given us a way to voice out facts.
+
+
+## PLOT - 4.1
+
+```{r}
+
+#Number of women enrolled in secondary education vs Average Fertility Rate
+ggplot(data= fertilityVsEducation, aes(x=AvgEnrollment, y=AverageFertilityRate, size=Year, color=Year) ) +
+       stat_smooth(method=lm, se= FALSE, colour = "brown", size = 1)+
+  #regression line to understand the data 
+       geom_point( alpha=0.7) + guides(colour = guide_legend()) +
+       ggtitle("Does literacy level influence the fertility rate ?") + # adds a title
+       xlab("Average Number of women enrolled in secondary education") + 
+       ylab("Average Fertility rate") +graph_commons #common graph properties used for all graphs
+```
+
+### Obesrvations:  
+
+It is good to see that the efforts are fruitful. The graph shows steady decline in average fertility rate as more women educate themselves. After 2005, the fertility rate seems to be less than 2.7, which in a few years can tend to hit 2.1 and reach population saturation as per Ridley's theory. 
+
+**Secondly, how fertility rate and GDP per capita are related?  **
+
+**GDP Per capita = GDP/ Population **
+
+Therefore, GDP Per capita is inversely proportional to Population.  
+
+When the population decreases, it will uplift the GDP Per Capita. As the fertility rate decreases, there will obviously be a drop in population. According to the relationship above, the GDP Per Capita would increase. 
+
+## PLOT - 4.2
+```{r}
+#Annual world GDP Per capita vs Average Fertility Rate
+ggplot(data= fertilityVsPerCapita, aes(x=AvgGDP, y=AverageFertilityRate, size=Year, color=Year) ) +
+       stat_smooth(method=lm, se= FALSE, colour = "red", size = 1)+ #regression line to understand the data 
+       geom_point( alpha=0.8) + guides(colour = guide_legend()) + 
+       ggtitle("Does GDP per capita influence the fertility rate ?") + 
+       xlab("Average annual GDP worldwide") + ylab("Average Fertility rate")+ graph_commons #common graph properties used for all graphs
+```
+
+### Observations:  
+
+From the graph, it is visible that the GDP Per Capita has increased with years. However, it does not seem to have an influence on the fertility rate. Also, we cannot say that the GDP causes the population downfall. Between years 1995-2005, the fertility rate is low, and the GDP Per Capita is increasing. However, as the x-axis progresses, the fertility rate at 2005 seems to increase too. Hence , we cannot derive any direct inference from their relationships. 
+
+## Conclusion:
+
+We felt that, Ridley's theory explains the decrease population and fertility rates based on economic wellness -  this certainly is an optimistic portrayal of the fact. In our opinion, Ridley, as a bioligists, could have considered the decay in average lifespan of a person and the reasons behind it. It would have been more logical to explain fertility rates or any theory by taking  into account both the positives and negatives. 
+
+For example:  
+1. How many kids died of cancer/diseases back in 1950 compared to 2015 ?  
+2. How many life threatening diseases, terrorists attacks,  natural disasters and other mishaps impact the lifespan/population ?  
+3. Did the economical development increase the sense of competition and peer pressure/stress shortening our longevity - It is a known fact that a woman's ability to give birth is affected by these factors.
+
+***Hence, in our opinion, the analysis of fertility rate has many more explanatory pointers in addition to education and economy.***
+
+## Additional Reading:  
+
+1. [Blog on The Rational Optimist by Matt Ridley](http://takingcareofmyownbusiness.com/2014/11/05/the-rational-optimist-by-matt-ridley/) 
+
+2. [Gates notes - Blog review on the book](https://www.gatesnotes.com/Books/Africa-Needs-Aid-Not-Flawed-Theories)
+
